@@ -1,68 +1,69 @@
-# Mini application temps réel 
+# Mini application temps réel
 
-GRZESZCZAK Jory - M2 AL v-ESGI Grenoble
+Projet réalisé par Jory Grzeszczak – M2 AL v-ESGI Grenoble
 
-## Lancer le projet
+## Comment lancer l’appli ?
 
-Prérequis : Node.js ≥ 18 (inclut `fetch` natif côté serveur) et Go ≥ 1.21.
+Je suis parti sur un duo Node.js/Go, donc il faut avoir Node 18+ (pour `fetch` natif côté serveur) et Go 1.21+.
 
 ```bash
 npm install
-npm run monitor   # lance le service Go de monitoring (dans un autre terminal)
-npm start         # démarre le serveur WebSocket/Express
+npm run monitor   # service Go de monitoring (à garder dans un terminal dédié)
+npm start         # serveur Express/WebSocket + front
 ```
 
-Le serveur HTTP écoute sur `http://localhost:3000` et sert l’interface `public/`. Le service Go de monitoring écoute sur `http://localhost:4001` et expose les métriques/logs consommés par le frontend. Ouvrez plusieurs onglets pour voir la synchronisation des items en direct.
+Ensuite, rendez‑vous sur `http://localhost:3000` avec deux onglets pour voir la synchro, et gardez en tête que le service Go répond sur `http://localhost:4001` (les métriques/logs viennent de là).
 
-## Architecture logique
+## Ce qu’il y a sous le capot
 
-- **Serveur HTTP/WebSocket** : `src/server.js` (Express + `ws`) sert les fichiers statiques, expose l’API d’authentification `/api/session`, et gère les actions temps réel (création/édition/suppression d’items, présence).
-- **Persistance locale** : SQLite (`data/app.db` via `better-sqlite3`) stocke les utilisateurs, sessions et items. Le serveur applique toutes les validations avant d’écrire.
-- **Canal temps réel** : WebSocket unique (`/ws`) authentifié via token stocké en base. Chaque message est validé et diffusé aux clients concernés.
-- **Monitoring Go** : `monitor/main.go` conserve les métriques (connexions, compteur d’actions, logs) et les expose via HTTP. Le serveur Node y pousse chaque événement de présence ou de synchro.
-- **Client Web** : `public/` contient une application front vanilla JS qui gère l’authentification locale (pseudo + secret), se reconnecte automatiquement, maintient une file d’actions hors-ligne et consomme à la fois le flux WS et l’API Go pour l’observabilité.
+- **Serveur HTTP/WebSocket** (`src/server.js`) : Express sert les fichiers statiques et l’API `/api/session`, `ws` gère les sockets (création/édition/suppression, présence, ping/pong).
+- **Stockage local** : SQLite (`data/app.db`, géré via `better-sqlite3`) mémorise utilisateurs, sessions et items. Tout est validé côté serveur avant insertion.
+- **Canal temps réel** : un seul endpoint WebSocket `/ws` sécurisé par token de session. Chaque message est vérifié avant d’être broadcasté.
+- **Service de monitoring** : petit service Go (`monitor/main.go`) qui reçoit les événements (présence, logs, compteur d’actions) et expose tout en HTTP pour le front ou un `curl`.
+- **Client web** (`public/`) : front vanilla JS, stockage local du token, file d’attente hors-ligne, reconnexion automatique avec backoff, affichage des métriques/latences.
 
-## Choix technologiques
+## Pourquoi ces technos ?
 
-- **Express + ws** : configuration minimale pour exposer HTTP et WebSocket dans un même processus, sans dépendre d’un service externe (contrainte “local only”).
-- **better-sqlite3** : binding synchrone simple qui garantit la persistance locale demandée avec très peu de configuration et de code asynchrone.
-- **PBKDF2 (crypto)** : permet de hasher le secret utilisateur sans dépendance additionnelle, conformément à l’exigence d’une authentification simple mais non triviale.
-- **Vanilla JS + Web APIs** : léger, suffisant pour prototyper rapidement la synchro et maîtriser précisément les mécanismes de reconnexion/monitoring.
+- **Express + ws** : pile légère, facile à faire tourner hors ligne pour un TP sans dépendre d’un PaaS.
+- **better-sqlite3** : API synchrone, pas besoin d’un ORM lourd et on garde des performances correctes pour quelques dizaines d’items.
+- **PBKDF2 (lib `crypto`)** : permet de hasher les secrets sans embarquer de lib externe, ce qui reste cohérent pour une authentification “simple mais sérieuse”.
+- **Vanilla JS** : suffit largement pour ce prototype et m’oblige à manipuler directement le WebSocket/DOM, ce qui est pédagogique.
+- **Go pour le monitoring** : je voulais séparer l’observabilité du serveur Node et manipuler un peu la stack Go (handlers, mutex, slices). 
 
-## Fonctionnalités clés
+## Fonctionnalités livrées
 
-| Exigence | Implémentation |
+| Besoin du sujet | Ce qui est implémenté |
 | --- | --- |
-| Persistance locale | SQLite (`items`, `users`, `sessions`) stocké dans `data/app.db`. |
-| Canal temps réel | WebSocket (`ws` module) avec diffusion des mutations (`item_created/updated/deleted`). |
-| Identités de session | Pseudo + secret → hash PBKDF2. Chaque connexion WS porte un token unique vérifié côté serveur. |
-| Sécurité (3 règles) | (1) Validation/assainissement serveur du contenu (longueur, caractères), (2) contrôle d’accès propriétaire (seul l’auteur peut modifier/supprimer), (3) rate limiting basique (15 actions/10 s/utilisateur) pour limiter abus/DDoS applicatif. |
-| Reconnexion automatique | Client conserve les actions en file, applique un exponential backoff et relance la connexion jusqu’à succès. |
-| Monitoring minimal | Service Go dédié exposant connexions, utilisateurs actifs, compteur d’actions traitées et logs synchronisés, consommés par l’UI et par `/api/metrics`. |
+| Persistance locale | SQLite (`items`, `users`, `sessions`) dans `data/app.db` |
+| Canal temps réel | WebSocket `ws` + diffusion `item_created/updated/deleted` |
+| Authentification | Pseudo + secret hashé PBKDF2 (+ token stocké hashé) |
+| Sécurité | 1) Validation/assainissement serveur, 2) contrôle propriétaire, 3) rate limiting 15 actions / 10 s / user |
+| Reconnexion client | Backoff exponentiel + file d’actions en mémoire |
+| Monitoring | Service Go : connexions, utilisateurs actifs, compteur d’actions, logs synchronisés |
 
-## Plan de sécurité
+## Sécurité (version courte)
 
-1. **Authentification stricte** : pseudo unique (collation NOCASE), secret hashé (PBKDF2 + salt) et token de session stocké hashé (SHA‑256). Les sockets non authentifiées sont rejetées immédiatement.
-2. **Validation serveur** : toutes les mutations passent par `sanitizeContent`, longueur max 280, et sont refusées côté serveur si le schéma n’est pas respecté.
-3. **Contrôle par utilisateur** : seules les personnes ayant créé un item peuvent l’éditer ou le supprimer (`owner_id` vérifié en SQL). Les actions sont limitées dans une fenêtre slide (anti-abus).
+1. **Identité** : pseudo unique (NOCASE) + secret hashé (PBKDF2 + salt) + token SHA‑256. Toute socket sans token valide est coupée.
+2. **Validation** : `sanitizeContent` impose 1‑280 caractères et retire les caractères spéciaux basiques. Rien n’est écrit tel quel depuis le client.
+3. **Autorisations** : un item n’est éditable/supprimable que par son auteur, et chaque utilisateur est bridé par le rate limit pour éviter les abus/DDoS applicatifs.
 
 ## Gestion des erreurs
 
-- **API REST** : réponses JSON structurées (`{ error: message }`) pour l’authentification. Le client affiche l’erreur sous le formulaire.
-- **WebSocket** : messages `error` renvoyés au client, également ajoutés aux logs locaux pour traçabilité. En cas de fermeture, un backoff exponentiel relance la connexion.
-- **Serveur** : chaque action valide est loggée en mémoire (`syncLogs`) et renvoyée aux clients pour fournir un historique de synchronisation.
+- API (auth) → JSON `{ error }` réutilisé côté formulaire.
+- WebSocket → messages `error` logués côté client + ajoutés au flux de logs Go.
+- Scripts côté client → reconnexion automatique et bannière d’état dès que le socket ferme, pour rester transparent vis‑à‑vis de l’utilisateur.
 
-## Limites et améliorations
+## Limites actuelles / pistes d’amélioration
 
-1. Les sessions n’expirent qu’après purge (48h). On pourrait ajouter une politique TTL plus fine ou un refresh token.
-2. L’édition collaborative est lockée par propriétaire. Implémenter un CRDT (bonus suggéré) permettrait des items co-édités par plusieurs utilisateurs.
-3. Le monitoring reste local. Brancher Prometheus (+ exporter HTTP) et ajouter des alertes Grafana offrirait une véritable observabilité.
-4. La UI reste volontairement simple (vanilla). Une couche de composants (React/Vite) offrirait une meilleure ergonomie et des tests unitaires.
+1. Les sessions expirent via une purge à 48h, pas de refresh/rotation plus fine.
+2. L’édition reste mono-auteur : un CRDT (bonus) permettrait de jouer sur de la coédition.
+3. Monitoring purement local : pas d’export Prometheus/Grafana, pas d’alerting.
+4. UI craftée à la main : une stack type Vite + composants aiderait pour des écrans plus élaborés/tests unitaires.
 
-## Dossier de livrables
+## Livrables
 
-- `answers.md` : réponses à la partie théorie.
-- `public/` : interface utilisateur (HTML/CSS/JS).
-- `src/server.js` + `data/app.db` : serveur Node.js, WebSocket, SQLite.
+- `answers.md` → réponses à la partie théorique.
+- `public/` → interface utilisateur.
+- `src/server.js` + `monitor/main.go` → back-end Node + service Go.
 
-Tout fonctionne hors-ligne, conformément aux contraintes.
+L’ensemble tourne hors ligne, ce qui respecte la consigne “pas de cloud / pas de backend distant”.

@@ -1,54 +1,56 @@
 # Partie A – Théorie
 
 ## Question 1 – Services cloud temps réel
-**a)** Firebase Realtime Database et Ably Realtime.
+**a)** Deux services managés que j’utilise volontiers : Firebase Realtime Database et Ably Realtime.
 
-**b)**
-- *Modèle de données* : Firebase expose un arbre JSON hiérarchique avec synchronisation par chemin, Ably fournit des canaux (pub/sub) qui transportent des messages arbitraires ; pas de schéma persistant côté Ably.
-- *Persistance* : Firebase persiste automatiquement chaque nœud (données durables et consultables ensuite). Ably ne conserve que des messages transitoires, avec une rétention limitée configurée (History) mais sans stockage longue durée natif.
-- *Mode d’écoute* : Firebase offre des listeners continus par chemin (`onValue`, `onChild*`) avec delta diff automatique. Ably est orienté pub/sub : les clients s’abonnent à un canal et reçoivent les messages émis, sans état global fourni par défaut.
-- *Scalabilité* : Firebase scale horizontalement mais impose des limites par base (writes/s, connexions simultanées) et nécessite un partitionnement logique des chemins. Ably répartit les canaux sur un cluster global et gère l’élasticité automatiquement, ce qui facilite les pics de trafic événementiel.
+**b)**  
+- *Modèle de données* : Firebase propose un arbre JSON hiérarchique où chaque branche est écoutable. Ably, lui, offre des canaux pub/sub qui transportent des messages arbitraires (pas de structure imposée).  
+- *Persistance* : dans Firebase, chaque nœud est stocké et retrouvable même après redémarrage. Ably garde surtout des messages éphémères, avec une option “History” mais sans vraie base longue durée.  
+- *Mode d’écoute* : Firebase fournit des listeners (`onValue`, `onChildAdded`…) qui renvoient l’état et les diff. Ably pousse les événements sur un canal auquel le client est abonné ; c’est l’appli qui reconstruit l’état.  
+- *Scalabilité* : Firebase scale bien mais impose des quotas par base (writes/s, connexions). Ably répartit automatiquement les canaux sur ses clusters et encaisse mieux les pics d’événements.
 
-**c)** Firebase convient mieux aux applications CRUD collaboratives (todo partagé, présence) nécessitant un état structuré persistant. Ably est adapté aux flux événementiels faible-latence (trading, IoT, notifications) où l’état complet est géré côté application.
+**c)** J’utiliserais Firebase pour une app collaborative type todo/presence où l’état doit être durable et structuré. Ably est parfait pour du streaming d’événements (trading temps réel, IoT) où l’état se reconstruit côté client.
 
 ## Question 2 – Sécurité temps réel
-**a)**
-1. Saturation DDoS via connexions persistantes : limiter le nombre de sockets par IP et activer un proxy (Nginx, Cloudflare) pour absorber les pics.
-2. Usurpation d’identité (token volé) : utiliser TLS, tokens signés à courte durée et régénération périodique.
-3. Injection de payload (XSS/commandes) via messages : valider/sanitariser tout contenu et appliquer des listes d’autorisation côté serveur.
+**a)**  
+1. DDoS via milliers de sockets ouvertes : on limite les connexions par IP, on place un proxy (Nginx/Cloudflare) et on coupe les sessions inactives.  
+2. Vol de token/session hijacking : TLS obligatoire, tokens signés à durée courte, renouvellement forcé.  
+3. Payload malveillant (XSS/injection) : validation stricte et sanitisation côté serveur, plus des règles d’autorisation sur chaque message.
 
-**b)** La gestion des identités garantit qu’un canal temps réel reste isolé : authentification forte évite que des utilisateurs écoutent ou publient sur des canaux non prévus, tandis que l’autorisation par message permet d’appliquer des règles (limites d’actions, rôles). Sans identité fiable il est impossible d’auditer, révoquer ou tracer les changements.
+**b)** Sans gestion d’identité solide on ne sait pas qui est sur la socket, impossible donc d’appliquer des rôles ou de tracer une action. Auth + autorisation temps réel garantissent qu’un utilisateur n’écoute/publie que ce qui lui est destiné et qu’on peut révoquer sa session en cas d’abus.
 
 ## Question 3 – WebSockets vs Webhooks
-**a)** WebSocket établit une connexion bidirectionnelle persistante sur TCP permettant l’échange full-duplex. Un Webhook est un appel HTTP sortant effectué par un service lorsqu’un événement se produit afin de notifier une autre application.
+**a)** WebSocket = connexion TCP persistante full-duplex entre client et serveur. Webhook = simple requête HTTP sortante déclenchée par un événement pour prévenir un autre service.
 
-**b)**
-- WebSocket avantages : latence très faible et bi-directionnalité native. Limites : nécessite des connexions persistantes (impact sur scaling) et traverse plus difficilement certains proxies/firewalls.
-- Webhook avantages : simple à intégrer (HTTP POST) et découple l’émetteur du récepteur (pas de connexion ouverte). Limites : unidirectionnel (push seulement) et dépend de l’accessibilité réseau publique du récepteur.
+**b)**  
+- WebSocket : + latence ultra faible, communication bidirectionnelle spontanée. – nécessite de garder les connexions ouvertes (coûteux) et peut être bloqué par des proxies stricts.  
+- Webhook : + super facile à intégrer (un endpoint HTTP suffit) et pas besoin de maintenir un socket. – unidirectionnel et il faut que le service destinataire soit publiquement accessible.
 
-**c)** Un Webhook est préférable quand les événements sont rares/modérés et que le destinataire peut exposer un endpoint accessible (ex : notifier un CRM lorsqu’un paiement est confirmé). Cela évite de maintenir des connexions persistantes inutiles.
+**c)** J’opte pour un Webhook quand les événements sont ponctuels (paiement confirmé, création de ticket) et que le consommateur peut exposer un endpoint accessible. Ça évite de monopoliser des connexions persistantes pour peu d’événements.
 
 ## Question 4 – CRDT & Collaboration
-**a)** Un CRDT (Conflict-free Replicated Data Type) est une structure de données distribuée dont les opérations sont conçues pour converger vers le même état final sur tous les réplicas sans coordination forte.
+**a)** Un CRDT (Conflict-free Replicated Data Type) est une structure de données pensée pour que chaque réplique converge automatiquement, même si les mises à jour arrivent dans le désordre.
 
-**b)** Exemple : éditeur de texte collaboratif hors-ligne (prise de notes). Chaque client applique des insertions/suppressions locales et synchronise via CRDT (ex : RGA ou LSEQ) pour garantir la convergence.
+**b)** Exemple concret : un éditeur de notes collaboratives hors-ligne. Chaque appareil applique ses insertions/suppressions localement et synchronise plus tard ; le CRDT (RGA/LSEQ, etc.) garantit que tout le monde obtient le même texte.
 
-**c)** Les CRDT définissent des opérations commutatives/idempotentes avec un ordre partiel (par horodatage logique ou version vectorielle). Même si les mises à jour arrivent dans un ordre différent, les règles de fusion assurent la même résolution, supprimant les conflits manuels.
+**c)** Les opérations d’un CRDT sont commutatives et idempotentes grâce à des horodatages ou vecteurs de version. Donc, peu importe l’ordre d’arrivée, la règle de fusion aboutit au même résultat sans verrou global.
 
 ## Question 5 – Monitoring temps réel
-**a)** Latence end-to-end, nombre de connexions actives, débit de messages (messages/s ou bytes/s).
+**a)** Les métriques que je surveille en priorité : la latence bout-en-bout, le nombre de connexions actives et le débit de messages (messages/s ou octets/s).
 
-**b)** Prometheus collecte métriques (scraping HTTP) et les stocke en time-series ; Grafana visualise ces métriques (dashboards, alertes) pour détecter anomalies (pente de latence, saturation).
+**b)** Prometheus scrape régulièrement les métriques exposées par l’app (HTTP). Grafana permet de construire les dashboards/alertes pour visualiser et déclencher des notifications si la latence grimpe ou si les connexions chutent.
 
-**c)** Les logs détaillent des événements discrets (texte). Les traces suivent un flux distribué (span) pour analyser un parcours request/global. Les métriques sont des valeurs agrégées/numériques dans le temps, adaptées aux alertes.
+**c)** Les logs sont des événements textuels, utiles pour rejouer un scénario. Les traces suivent un flot complet (span) pour comprendre un parcours distribué. Les métriques sont des valeurs numériques agrégées dans le temps, parfaites pour l’observabilité et les seuils d’alerte.
 
-## Question 6 – Déploiement & Connexions persistantes
-**a)** Les connexions WebSocket collent une session à un pod/instance : le load balancer doit respecter l’affinité (sticky sessions) ou utiliser un bus partagé. Leur nombre élevé consomme des file descriptors/mémoire, limitant la scalabilité ; il faut multiplier les réplicas et partager l’état (Redis, DB) pour broadcast.
+## Question 6 – Déploiement & connexions persistantes
+**a)** Un socket WebSocket reste collé à l’instance qui l’a accepté. Du coup, le load balancer doit faire du sticky session ou partager l’état via un bus (Redis, DB). En masse, ces connexions consomment file descriptors et mémoire, ce qui impose d’ajouter des réplicas et de bien partager les messages.
 
-**b)** Kubernetes facilite ce contexte via l’auto-scaling horizontal, les probes de santé, la gestion des ConfigMaps/Secrets, et l’abstraction Service/Ingress pour conserver les sessions tout en redirigeant automatiquement quand des pods meurent.
+**b)** Kubernetes aide car il apporte l’auto-scaling horizontal, les probes de santé, la gestion des ConfigMaps/Secrets et l’abstraction Service/Ingress. Quand un pod tombe, un autre prend la main et les connexions se rétablissent automatiquement.
 
 ## Question 7 – Stratégies de résilience client
-**a)**
-1. Reconnexion automatique avec backoff. 2. Mise en file locale des actions pour les rejouer quand la connexion revient. 3. Détection de heartbeat/ping pour basculer en mode dégradé (lecture seule, bannière d’état).
+**a)**  
+1. Reconnexion automatique avec backoff pour éviter le spam.  
+2. File d’attente locale des actions afin de rejouer ce qui a été tapé hors-ligne.  
+3. Heartbeat/ping régulier pour détecter une coupure et passer l’UI en mode dégradé (lecture seule, bannière d’information).
 
-**b)** L’exponential backoff augmente progressivement l’intervalle entre les tentatives (ex : 1s, 2s, 4s…) jusqu’à une limite, ce qui réduit la charge sur le serveur lors des pannes et évite que tous les clients reconnectent simultanément.
+**b)** L’exponential backoff augmente progressivement le délai entre les tentatives (1s, 2s, 4s…). Ça laisse au serveur le temps de se remettre et évite l’effet “orage de reconnexions” quand tout le monde réessaie en même temps.
