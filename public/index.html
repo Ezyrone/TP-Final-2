@@ -7,6 +7,20 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <header class="topnav">
+      <div class="brand">
+        <span class="spark"></span>
+        PulseSync
+      </div>
+      <div class="top-actions">
+        <div class="diag-badges">
+          <span class="badge" id="status-pill">offline</span>
+          <span class="badge ghost" id="latency-pill">latency —</span>
+        </div>
+        <button id="theme-toggle" aria-label="Toggle theme"></button>
+      </div>
+    </header>
+
     <main class="page">
       <section class="panel auth-panel" id="auth-panel">
         <h1>Realtime mini app</h1>
@@ -68,15 +82,21 @@
           </div>
 
           <div class="card side-panel">
-            <h2>Monitoring</h2>
+            <h2>Telemetry</h2>
+            <div class="latency-widget">
+              <div class="latency-bar">
+                <div class="latency-progress" id="latency-progress"></div>
+              </div>
+              <span id="latency-value">— ms</span>
+            </div>
             <ul class="metrics">
               <li><strong>Active connections</strong> <span id="connections-count">0</span></li>
               <li><strong>Users</strong> <span id="users-count">0</span></li>
-              <li><strong>Estimated latency</strong> <span id="latency-value">-</span></li>
               <li><strong>Processed actions</strong> <span id="metrics-count">0</span></li>
             </ul>
 
             <h3>Connected users</h3>
+            <div id="presence-avatars" class="presence-avatars"></div>
             <ul id="users-list" class="users-list"></ul>
 
             <h3>Sync logs</h3>
@@ -85,6 +105,12 @@
         </section>
       </section>
     </main>
+
+    <button id="fab-add" class="fab" aria-label="Add item">
+      <span>+</span>
+    </button>
+
+    <div id="toast-container" class="toast-container"></div>
 
     <template id="item-template">
       <li class="item">

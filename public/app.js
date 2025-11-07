@@ -16,14 +16,24 @@ const connectionsCount = document.querySelector('#connections-count');
 const usersCount = document.querySelector('#users-count');
 const latencyValue = document.querySelector('#latency-value');
 const metricsCount = document.querySelector('#metrics-count');
+const themeToggle = document.querySelector('#theme-toggle');
+const toastContainer = document.querySelector('#toast-container');
+const statusPill = document.querySelector('#status-pill');
+const latencyPill = document.querySelector('#latency-pill');
+const latencyProgress = document.querySelector('#latency-progress');
+const presenceAvatars = document.querySelector('#presence-avatars');
+const fabAdd = document.querySelector('#fab-add');
 const MONITORING_URL = `${window.location.protocol}//${window.location.hostname}:4001`;
 
 const SESSION_KEY = 'tp-realtime-session';
+const THEME_KEY = 'tp-theme-preference';
 const MAX_LOGS = 40;
 const MAX_BACKOFF = 15_000;
+const COMPOSER_HIGHLIGHT_MS = 1_200;
 
 const state = {
   session: loadSession(),
+  theme: loadThemePreference(),
   items: new Map(),
   users: [],
   logs: [],
@@ -36,8 +46,11 @@ let socket;
 let reconnectDelay = 1000;
 let reconnectTimer;
 let pingTimer;
+let composerHighlightTimer;
 const pendingMessages = [];
+let lastConnectionStatus = null;
 
+applyTheme(state.theme);
 init();
 
 function init() {
@@ -45,6 +58,8 @@ function init() {
   logoutBtn.addEventListener('click', handleLogout);
   itemForm.addEventListener('submit', handleCreateItem);
   itemsList.addEventListener('click', handleListActions);
+  themeToggle?.addEventListener('click', toggleTheme);
+  fabAdd?.addEventListener('click', focusComposer);
 
   if (state.session) {
     togglePanels(true);
@@ -120,14 +135,14 @@ function handleListActions(event) {
   if (event.target.closest('.edit-btn')) {
     const current = state.items.get(itemId);
     if (!current) return;
-    const nextValue = prompt('Modifier le contenu', current.content);
+    const nextValue = prompt('Edit this item', current.content);
     if (nextValue && nextValue.trim().length > 0 && nextValue.trim().length <= 280) {
       sendMessage('update_item', { id: itemId, content: nextValue.trim() });
     }
   }
 
   if (event.target.closest('.delete-btn')) {
-    if (confirm('Supprimer cet item ?')) {
+    if (confirm('Delete this item?')) {
       sendMessage('delete_item', { id: itemId });
     }
   }
@@ -250,11 +265,18 @@ function handleSocketMessage(message) {
       applyInitialState(message.payload);
       break;
     case 'item_created':
+      updateItem(message.payload);
+      announceItemEvent('created', message.payload);
+      break;
     case 'item_updated':
       updateItem(message.payload);
+      announceItemEvent('updated', message.payload);
       break;
     case 'item_deleted':
-      removeItem(message.payload.id);
+      {
+        const removed = removeItem(message.payload.id);
+        announceItemEvent('deleted', removed);
+      }
       break;
     case 'presence':
       state.connections = message.payload.connections;
@@ -305,9 +327,28 @@ function updateItem(item) {
 }
 
 function removeItem(id) {
-  if (!id) return;
+  if (!id) return null;
+  const existing = state.items.get(id) || null;
   state.items.delete(id);
   renderItems();
+  return existing;
+}
+
+function announceItemEvent(type, item) {
+  if (!item) return;
+  const isSelf = state.session?.userId === item.ownerId;
+  const actor = isSelf ? 'You' : item.ownerPseudo || 'Someone';
+  let message = '';
+  if (type === 'created') {
+    message = `${actor} added an item`;
+  } else if (type === 'updated') {
+    message = `${actor} updated an item`;
+  } else if (type === 'deleted') {
+    message = `${actor} removed an item`;
+  }
+  if (message) {
+    showToast(message, isSelf ? 'success' : 'info');
+  }
 }
 
 function pushLog(entry) {
@@ -328,9 +369,9 @@ function renderItems() {
     const clone = itemTemplate.content.firstElementChild.cloneNode(true);
     clone.dataset.id = item.id;
     clone.querySelector('.item-text').textContent = item.content;
-    clone.querySelector('.item-meta').textContent = `par ${item.ownerPseudo} · ${
-      formatDate(item.updatedAt || item.createdAt)
-    }`;
+    clone.querySelector('.item-meta').textContent = `${item.ownerPseudo} · ${formatDate(
+      item.updatedAt || item.createdAt
+    )}`;
 
     const actions = clone.querySelector('.item-actions');
     const isOwner = state.session?.userId === item.ownerId;
@@ -341,7 +382,7 @@ function renderItems() {
 
   itemsList.innerHTML = '';
   itemsList.appendChild(fragment);
-  itemCount.textContent = `${sorted.length} élément${sorted.length > 1 ? 's' : ''}`;
+  itemCount.textContent = `${sorted.length} item${sorted.length > 1 ? 's' : ''}`;
 }
 
 function renderUsers() {
@@ -357,6 +398,7 @@ function renderUsers() {
   usersList.innerHTML = '';
   usersList.appendChild(fragment);
   usersCount.textContent = state.users.length;
+  renderPresenceAvatars();
 }
 
 function renderLogs() {
@@ -370,11 +412,39 @@ function renderLogs() {
   logsList.appendChild(fragment);
 }
 
+function renderPresenceAvatars() {
+  if (!presenceAvatars) return;
+  presenceAvatars.innerHTML = '';
+  (state.users || []).forEach((user) => {
+    const chip = document.createElement('div');
+    chip.className = 'presence-chip';
+    if (state.session?.userId === user.userId) {
+      chip.classList.add('me');
+    }
+    chip.textContent = user.pseudo?.slice(0, 2).toUpperCase() || '?';
+    chip.title = `${user.pseudo} (${user.connections})`;
+    presenceAvatars.appendChild(chip);
+  });
+}
+
+function updateLatencyIndicators() {
+  const hasLatency = typeof state.latency === 'number' && !Number.isNaN(state.latency);
+  const readable = hasLatency ? `${state.latency} ms` : 'n/d';
+  latencyValue.textContent = readable;
+  if (latencyPill) {
+    latencyPill.textContent = hasLatency ? `latency ${state.latency} ms` : 'latency —';
+  }
+  if (latencyProgress) {
+    const width = hasLatency ? Math.min(Math.max((state.latency / 600) * 100, 6), 100) : 6;
+    latencyProgress.style.width = `${width}%`;
+  }
+}
+
 function updateMonitoring() {
   connectionsCount.textContent = state.connections;
   usersCount.textContent = state.users.length;
-  latencyValue.textContent = state.latency ? `${state.latency} ms` : 'n/d';
   metricsCount.textContent = state.metrics.totalMessagesProcessed ?? 0;
+  updateLatencyIndicators();
 }
 
 function togglePanels(isAuthenticated) {
@@ -382,26 +452,42 @@ function togglePanels(isAuthenticated) {
     authPanel.classList.add('hidden');
     appPanel.classList.remove('hidden');
     userLabel.textContent = state.session?.pseudo ?? '';
-    setConnectionStatus(false, 'initialisation');
+    setConnectionStatus(false, 'initialising');
   } else {
     authPanel.classList.remove('hidden');
     appPanel.classList.add('hidden');
     userLabel.textContent = '';
     setConnectionStatus(false);
   }
+  fabAdd?.classList.toggle('hidden', !isAuthenticated);
 }
 
 function setConnectionStatus(isOnline, detail = '') {
-  connectionStatus.textContent = isOnline ? 'en ligne' : 'hors ligne';
-  if (detail) {
-    connectionStatus.textContent += ` · ${detail}`;
-  }
+  const label = isOnline ? 'online' : 'offline';
+  connectionStatus.textContent = detail ? `${label} · ${detail}` : label;
   connectionStatus.classList.toggle('online', isOnline);
   connectionStatus.classList.toggle('offline', !isOnline);
+
+  if (statusPill) {
+    statusPill.textContent = label;
+    statusPill.classList.remove('online', 'offline');
+    statusPill.classList.add(label);
+  }
+
+  if (lastConnectionStatus === null) {
+    lastConnectionStatus = label;
+    return;
+  }
+
+  if (lastConnectionStatus !== label) {
+    showToast(isOnline ? 'Connection restored' : 'Connection lost', isOnline ? 'success' : 'error');
+    lastConnectionStatus = label;
+  }
 }
 
 function notify(message) {
   pushLog({ message: `⚠ ${message}`, timestamp: new Date().toISOString() });
+  showToast(message, 'error');
 }
 
 function formatDate(isoString) {
@@ -445,4 +531,75 @@ function loadSession() {
 
 function clearSession() {
   localStorage.removeItem(SESSION_KEY);
+}
+
+function focusComposer() {
+  if (!itemInput) return;
+  itemInput.focus();
+  itemInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  flashComposerCard();
+}
+
+function flashComposerCard() {
+  const composerCard = document.querySelector('.composer');
+  if (!composerCard) return;
+  composerCard.classList.add('highlight');
+  clearTimeout(composerHighlightTimer);
+  composerHighlightTimer = setTimeout(() => {
+    composerCard.classList.remove('highlight');
+  }, COMPOSER_HIGHLIGHT_MS);
+}
+
+function showToast(message, type = 'info') {
+  if (!toastContainer || !message) return;
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  if (type === 'error') {
+    toast.classList.add('error');
+  } else if (type === 'success') {
+    toast.classList.add('success');
+  } else {
+    toast.classList.add('info');
+  }
+  const pulse = document.createElement('span');
+  pulse.className = 'pulse';
+  toast.appendChild(pulse);
+  const text = document.createElement('span');
+  text.textContent = message;
+  toast.appendChild(text);
+  toastContainer.appendChild(toast);
+  setTimeout(() => {
+    toast.classList.add('hide');
+    setTimeout(() => toast.remove(), 350);
+  }, 3500);
+}
+
+function toggleTheme() {
+  const next = state.theme === 'dark' ? 'light' : 'dark';
+  state.theme = next;
+  applyTheme(next);
+  showToast(`Switched to ${next} mode`, 'info');
+}
+
+function loadThemePreference() {
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === 'light' || saved === 'dark') {
+      return saved;
+    }
+  } catch (err) {
+    // ignore
+  }
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches
+    ? 'light'
+    : 'dark';
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  try {
+    localStorage.setItem(THEME_KEY, theme);
+  } catch (err) {
+    // ignore
+  }
 }
