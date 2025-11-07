@@ -587,9 +587,7 @@ function loadThemePreference() {
     if (saved === 'light' || saved === 'dark') {
       return saved;
     }
-  } catch (err) {
-    // ignore
-  }
+  } catch (err) {}
   return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches
     ? 'light'
     : 'dark';
@@ -599,7 +597,5 @@ function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
   try {
     localStorage.setItem(THEME_KEY, theme);
-  } catch (err) {
-    // ignore
-  }
+  } catch (err) {}
 }

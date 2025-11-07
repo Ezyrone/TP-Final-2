@@ -74,8 +74,8 @@ const softDeleteItemStmt = db.prepare(
 
 const ACTION_WINDOW_MS = 10_000;
 const ACTION_LIMIT = 15;
-const rateTracker = new Map(); // userId -> timestamps
-const activeUsers = new Map(); // userId -> { userId, pseudo, connections }
+const rateTracker = new Map();
+const activeUsers = new Map();
 
 const app = express();
 app.use(express.json());
@@ -117,7 +117,6 @@ app.post('/api/session', (req, res) => {
   const token = crypto.randomBytes(32).toString('hex');
   const tokenHash = hashToken(token);
   insertSessionStmt.run(user.id, tokenHash, now);
-  // prune sessions older than 2 days
   const cutoff = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
   pruneSessionsStmt.run(cutoff);
 
