@@ -1,22 +1,26 @@
-# Mini application temps réel (TP noté)
+# Mini application temps réel 
 
-Ce dépôt contient les livrables du TP : réponses théoriques (`answers.md`) et une application Web temps réel fonctionnant entièrement en local (WebSocket + SQLite).
+GRZESZCZAK Jory - M2 AL v-ESGI Grenoble
 
 ## Lancer le projet
 
+Prérequis : Node.js ≥ 18 (inclut `fetch` natif côté serveur) et Go ≥ 1.21.
+
 ```bash
 npm install
-npm start
+npm run monitor   # lance le service Go de monitoring (dans un autre terminal)
+npm start         # démarre le serveur WebSocket/Express
 ```
 
-Le serveur écoute sur `http://localhost:3000` et sert l’interface située dans `public/`. Ouvrez plusieurs onglets pour voir la synchronisation des items en direct.
+Le serveur HTTP écoute sur `http://localhost:3000` et sert l’interface `public/`. Le service Go de monitoring écoute sur `http://localhost:4001` et expose les métriques/logs consommés par le frontend. Ouvrez plusieurs onglets pour voir la synchronisation des items en direct.
 
 ## Architecture logique
 
-- **Serveur HTTP/WebSocket** : `src/server.js` (Express + `ws`) sert les fichiers statiques, expose l’API d’authentification `/api/session`, et gère les actions temps réel (création/édition/suppression d’items, présence, monitoring).
+- **Serveur HTTP/WebSocket** : `src/server.js` (Express + `ws`) sert les fichiers statiques, expose l’API d’authentification `/api/session`, et gère les actions temps réel (création/édition/suppression d’items, présence).
 - **Persistance locale** : SQLite (`data/app.db` via `better-sqlite3`) stocke les utilisateurs, sessions et items. Le serveur applique toutes les validations avant d’écrire.
 - **Canal temps réel** : WebSocket unique (`/ws`) authentifié via token stocké en base. Chaque message est validé et diffusé aux clients concernés.
-- **Client Web** : `public/` contient une application front vanilla JS qui gère l’authentification locale (pseudo + secret), se reconnecte automatiquement, maintient une file d’actions hors-ligne et met à jour l’UI via le flux WS.
+- **Monitoring Go** : `monitor/main.go` conserve les métriques (connexions, compteur d’actions, logs) et les expose via HTTP. Le serveur Node y pousse chaque événement de présence ou de synchro.
+- **Client Web** : `public/` contient une application front vanilla JS qui gère l’authentification locale (pseudo + secret), se reconnecte automatiquement, maintient une file d’actions hors-ligne et consomme à la fois le flux WS et l’API Go pour l’observabilité.
 
 ## Choix technologiques
 
@@ -34,7 +38,7 @@ Le serveur écoute sur `http://localhost:3000` et sert l’interface située dan
 | Identités de session | Pseudo + secret → hash PBKDF2. Chaque connexion WS porte un token unique vérifié côté serveur. |
 | Sécurité (3 règles) | (1) Validation/assainissement serveur du contenu (longueur, caractères), (2) contrôle d’accès propriétaire (seul l’auteur peut modifier/supprimer), (3) rate limiting basique (15 actions/10 s/utilisateur) pour limiter abus/DDoS applicatif. |
 | Reconnexion automatique | Client conserve les actions en file, applique un exponential backoff et relance la connexion jusqu’à succès. |
-| Monitoring minimal | Compteur de connexions & présence, affichage de la latence estimée (ping/pong), flux de logs synchronisés + compteur d’actions traitées. |
+| Monitoring minimal | Service Go dédié exposant connexions, utilisateurs actifs, compteur d’actions traitées et logs synchronisés, consommés par l’UI et par `/api/metrics`. |
 
 ## Plan de sécurité
 
@@ -61,4 +65,4 @@ Le serveur écoute sur `http://localhost:3000` et sert l’interface située dan
 - `public/` : interface utilisateur (HTML/CSS/JS).
 - `src/server.js` + `data/app.db` : serveur Node.js, WebSocket, SQLite.
 
-Tout fonctionne hors-ligne, conformément aux contraintes (pas de cloud ni backend distant).
+Tout fonctionne hors-ligne, conformément aux contraintes.

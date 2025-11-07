@@ -9,6 +9,8 @@ const Database = require('better-sqlite3');
 const DATA_DIR = path.join(__dirname, '..', 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
+const MONITORING_URL = process.env.MONITORING_URL || 'http://localhost:4001';
+
 const db = new Database(path.join(DATA_DIR, 'app.db'));
 db.pragma('journal_mode = WAL');
 db.exec(`
@@ -70,16 +72,10 @@ const softDeleteItemStmt = db.prepare(
   'UPDATE items SET deleted = 1, updated_at = ? WHERE id = ? AND owner_id = ? AND deleted = 0'
 );
 
-const metrics = {
-  totalMessagesProcessed: 0,
-};
-
 const ACTION_WINDOW_MS = 10_000;
 const ACTION_LIMIT = 15;
 const rateTracker = new Map(); // userId -> timestamps
 const activeUsers = new Map(); // userId -> { userId, pseudo, connections }
-const syncLogs = [];
-const MAX_LOGS = 50;
 
 const app = express();
 app.use(express.json());
@@ -132,13 +128,9 @@ app.post('/api/session', (req, res) => {
   });
 });
 
-app.get('/api/metrics', (_req, res) => {
-  res.json({
-    connections: getConnectionCount(),
-    users: getActiveUsers(),
-    metrics,
-    logs: syncLogs,
-  });
+app.get('/api/metrics', async (_req, res) => {
+  const snapshot = (await getMonitoringSnapshot()) || defaultMonitoringSnapshot();
+  res.json(snapshot);
 });
 
 const server = http.createServer(app);
@@ -168,7 +160,9 @@ wss.on('connection', (ws, req) => {
   };
 
   addActiveUser(client);
-  sendInitialState(ws);
+  sendInitialState(ws).catch((err) => {
+    console.error('Erreur d’envoi de l’état initial:', err);
+  });
   broadcastPresence();
   pushLog(`Connexion de ${client.pseudo}`);
 
@@ -235,8 +229,7 @@ function handleCreateItem(ws, client, payload) {
   insertItemStmt.run(id, content, client.userId, client.pseudo, now, now);
   const item = formatItem(getItemStmt.get(id));
 
-  metrics.totalMessagesProcessed += 1;
-  broadcast('metrics', metrics);
+  incrementMonitoringMessages();
   broadcast('item_created', item);
   pushLog(`${client.pseudo} a ajouté un item`);
 }
@@ -276,8 +269,7 @@ function handleUpdateItem(ws, client, payload) {
   }
 
   const item = formatItem(getItemStmt.get(payload.id));
-  metrics.totalMessagesProcessed += 1;
-  broadcast('metrics', metrics);
+  incrementMonitoringMessages();
   broadcast('item_updated', item);
   pushLog(`${client.pseudo} a modifié un item`);
 }
@@ -309,8 +301,7 @@ function handleDeleteItem(ws, client, payload) {
     );
   }
 
-  metrics.totalMessagesProcessed += 1;
-  broadcast('metrics', metrics);
+  incrementMonitoringMessages();
   broadcast('item_deleted', { id: payload.id });
   pushLog(`${client.pseudo} a supprimé un item`);
 }
@@ -330,17 +321,18 @@ function handlePing(ws, payload) {
   );
 }
 
-function sendInitialState(ws) {
+async function sendInitialState(ws) {
   const items = listItemsStmt.all().map(formatItem);
+  const monitoring = (await getMonitoringSnapshot()) || defaultMonitoringSnapshot();
   ws.send(
     JSON.stringify({
       type: 'initial_state',
       payload: {
         items,
-        connections: getConnectionCount(),
-        users: getActiveUsers(),
-        logs: syncLogs,
-        metrics,
+        connections: monitoring.connections,
+        users: monitoring.users,
+        logs: monitoring.logs,
+        metrics: monitoring.metrics,
       },
     })
   );
@@ -379,10 +371,12 @@ function removeActiveUser(client) {
 }
 
 function broadcastPresence() {
-  broadcast('presence', {
+  const snapshot = {
     connections: getConnectionCount(),
     users: getActiveUsers(),
-  });
+  };
+  broadcast('presence', snapshot);
+  sendMonitoringRequest('/presence', snapshot, { quiet: true });
 }
 
 function pushLog(message) {
@@ -390,11 +384,8 @@ function pushLog(message) {
     message,
     timestamp: new Date().toISOString(),
   };
-  syncLogs.push(entry);
-  if (syncLogs.length > MAX_LOGS) {
-    syncLogs.shift();
-  }
   broadcast('sync_log', entry);
+  sendMonitoringRequest('/logs', entry, { quiet: true });
 }
 
 function broadcast(type, payload) {
@@ -422,6 +413,65 @@ function getConnectionCount() {
     }
   });
   return count;
+}
+
+async function incrementMonitoringMessages(delta = 1) {
+  const updatedMetrics =
+    (await sendMonitoringRequest('/metrics/messages', { delta }, { quiet: true })) || null;
+  if (updatedMetrics && typeof updatedMetrics.totalMessagesProcessed === 'number') {
+    broadcast('metrics', updatedMetrics);
+  }
+}
+
+async function getMonitoringSnapshot() {
+  return (
+    (await sendMonitoringRequest('/metrics', null, {
+      method: 'GET',
+      quiet: false,
+    })) || null
+  );
+}
+
+function defaultMonitoringSnapshot() {
+  return {
+    connections: getConnectionCount(),
+    users: getActiveUsers(),
+    logs: [],
+    metrics: { totalMessagesProcessed: 0 },
+  };
+}
+
+async function sendMonitoringRequest(path, payload, options = {}) {
+  const method = options.method || 'POST';
+  const quiet = options.quiet === true;
+  const expectJson = options.expectJson !== false;
+  const requestOptions = {
+    method,
+    headers: {},
+  };
+
+  if (method !== 'GET') {
+    requestOptions.headers['Content-Type'] = 'application/json';
+    if (payload) {
+      requestOptions.body = JSON.stringify(payload);
+    }
+  }
+
+  try {
+    const response = await fetch(`${MONITORING_URL}${path}`, requestOptions);
+    if (!response.ok) {
+      throw new Error(`status ${response.status}`);
+    }
+    if (!expectJson) {
+      return null;
+    }
+    return await response.json();
+  } catch (err) {
+    if (!quiet) {
+      console.warn(`Monitoring service unreachable (${path}):`, err.message);
+    }
+    return null;
+  }
 }
 
 function hashSecret(secret, salt) {

@@ -16,6 +16,7 @@ const connectionsCount = document.querySelector('#connections-count');
 const usersCount = document.querySelector('#users-count');
 const latencyValue = document.querySelector('#latency-value');
 const metricsCount = document.querySelector('#metrics-count');
+const MONITORING_URL = `${window.location.protocol}//${window.location.hostname}:4001`;
 
 const SESSION_KEY = 'tp-realtime-session';
 const MAX_LOGS = 40;
@@ -171,19 +172,38 @@ function connectSocket(initial = false) {
 }
 
 async function fetchInitialSnapshot() {
+  const data = await requestMonitoringSnapshot();
+  if (!data) {
+    return;
+  }
+  state.connections = data.connections ?? state.connections;
+  state.users = data.users || [];
+  state.logs = data.logs || [];
+  state.metrics = data.metrics || state.metrics;
+  updateMonitoring();
+  renderUsers();
+  renderLogs();
+}
+
+async function requestMonitoringSnapshot() {
   try {
-    const res = await fetch('/api/metrics');
-    if (!res.ok) return;
-    const data = await res.json();
-    state.connections = data.connections;
-    state.users = data.users || [];
-    state.logs = data.logs || [];
-    state.metrics = data.metrics || state.metrics;
-    updateMonitoring();
-    renderUsers();
-    renderLogs();
+    const res = await fetch(`${MONITORING_URL}/metrics`);
+    if (!res.ok) {
+      throw new Error(`status ${res.status}`);
+    }
+    return await res.json();
   } catch (err) {
-    console.error('Impossible de récupérer les métriques', err);
+    console.warn('Service de monitoring Go indisponible, fallback Node.', err);
+    try {
+      const fallback = await fetch('/api/metrics');
+      if (!fallback.ok) {
+        throw new Error(`status ${fallback.status}`);
+      }
+      return await fallback.json();
+    } catch (fallbackErr) {
+      console.error('Impossible de récupérer les métriques', fallbackErr);
+      return null;
+    }
   }
 }
 

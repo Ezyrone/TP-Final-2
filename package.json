@@ -4,7 +4,8 @@
   "description": "Mini application temps réel WebSocket + SQLite",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "monitor": "go run ./monitor"
   },
   "repository": {
     "type": "git",
