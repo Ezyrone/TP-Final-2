@@ -1,10 +1,10 @@
 # Mini application temps réel
 
-Projet réalisé par Jory Grzeszczak – M2 AL v-ESGI Grenoble.
+Projet réalisé par Jory Grzeszczak – M2 AL -ESGI Grenoble.
 
 ## Lancement
 
-Prérequis : Node.js ≥ 18 (support natif de `fetch` côté serveur) et Go ≥ 1.21.
+Prérequis : Node.js ≥ 18 et Go ≥ 1.21.
 
 ```bash
 npm install
