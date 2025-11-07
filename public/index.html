@@ -1,67 +1,67 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TP Temps Réel</title>
+    <title>Realtime Mini App</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <main class="page">
       <section class="panel auth-panel" id="auth-panel">
-        <h1>Mini app temps réel</h1>
-        <p class="panel-subtitle">Identifiez-vous pour synchroniser vos items.</p>
+        <h1>Realtime mini app</h1>
+        <p class="panel-subtitle">Sign in to keep your items in sync.</p>
         <form id="login-form" class="card">
           <label class="field">
-            <span>Pseudo</span>
+            <span>Username</span>
             <input type="text" name="pseudo" required minlength="3" maxlength="20" pattern="[A-Za-z0-9_-]+" />
           </label>
           <label class="field">
-            <span>Secret local (min. 6 caractères)</span>
+            <span>Local secret (min. 6 characters)</span>
             <input type="password" name="secret" required minlength="6" maxlength="50" />
           </label>
-          <button type="submit" class="primary-btn">Créer/Rejoindre la session</button>
+          <button type="submit" class="primary-btn">Create / Join session</button>
           <p id="login-error" class="error-text hidden"></p>
         </form>
         <p class="hint">
-          Réutilisez le même pseudo + secret pour retrouver vos items personnels.
+          Use the same username + secret to retrieve your personal items.
         </p>
       </section>
 
       <section class="panel app-panel hidden" id="app-panel">
         <header class="app-header">
           <div>
-            <h1>Liste partagée</h1>
+            <h1>Shared list</h1>
             <p class="status-line">
-              Connecté en tant que <span id="user-label"></span>
-              <span id="connection-status" class="status-dot offline">hors ligne</span>
+              Signed in as <span id="user-label"></span>
+              <span id="connection-status" class="status-dot offline">offline</span>
             </p>
           </div>
           <div class="actions">
-            <button id="logout-btn">Se déconnecter</button>
+            <button id="logout-btn">Sign out</button>
           </div>
         </header>
 
         <section class="card composer">
           <form id="item-form">
             <label class="field">
-              <span>Nouvel item</span>
+              <span>New item</span>
               <input
                 type="text"
                 id="item-input"
-                placeholder="Décrivez l’item (max 280 caractères)"
+                placeholder="Describe the item (max 280 characters)"
                 maxlength="280"
                 required
               />
             </label>
-            <button type="submit" class="primary-btn">Ajouter</button>
+            <button type="submit" class="primary-btn">Add</button>
           </form>
         </section>
 
         <section class="grid">
           <div class="card">
             <div class="card-header">
-              <h2>Items synchronisés</h2>
+              <h2>Synced items</h2>
               <span id="item-count" class="muted"></span>
             </div>
             <ul id="items-list" class="items-list"></ul>
@@ -70,16 +70,16 @@
           <div class="card side-panel">
             <h2>Monitoring</h2>
             <ul class="metrics">
-              <li><strong>Connexions actives</strong> <span id="connections-count">0</span></li>
-              <li><strong>Utilisateurs</strong> <span id="users-count">0</span></li>
-              <li><strong>Latence estimée</strong> <span id="latency-value">-</span></li>
-              <li><strong>Actions traitées</strong> <span id="metrics-count">0</span></li>
+              <li><strong>Active connections</strong> <span id="connections-count">0</span></li>
+              <li><strong>Users</strong> <span id="users-count">0</span></li>
+              <li><strong>Estimated latency</strong> <span id="latency-value">-</span></li>
+              <li><strong>Processed actions</strong> <span id="metrics-count">0</span></li>
             </ul>
 
-            <h3>Utilisateurs connectés</h3>
+            <h3>Connected users</h3>
             <ul id="users-list" class="users-list"></ul>
 
-            <h3>Logs de synchro</h3>
+            <h3>Sync logs</h3>
             <ul id="logs-list" class="logs-list"></ul>
           </div>
         </section>
@@ -93,8 +93,8 @@
           <small class="muted item-meta"></small>
         </div>
         <div class="item-actions">
-          <button class="ghost-btn edit-btn">Modifier</button>
-          <button class="ghost-btn danger delete-btn">Supprimer</button>
+          <button class="ghost-btn edit-btn">Edit</button>
+          <button class="ghost-btn danger delete-btn">Delete</button>
         </div>
       </li>
     </template>
