@@ -1,0 +1,252 @@
+:root {
+  color-scheme: light dark;
+  --bg: #0f172a;
+  --panel: #1e2338;
+  --card: #161b2d;
+  --border: #29304a;
+  --text: #f8fafc;
+  --muted: #94a3b8;
+  --primary: #38bdf8;
+  --danger: #fb7185;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(circle at top, rgba(56, 189, 248, 0.15), transparent 45%),
+    var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+.page {
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  padding: 2rem;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.panel {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 2rem;
+  width: min(900px, 100%);
+  box-shadow: 0 15px 60px rgba(2, 6, 23, 0.7);
+}
+
+.auth-panel {
+  max-width: 420px;
+}
+
+.app-panel.hidden,
+.auth-panel.hidden {
+  display: none;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.error-text {
+  color: var(--danger);
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.05);
+}
+
+.panel-subtitle,
+.hint {
+  color: var(--muted);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+  font-size: 0.95rem;
+}
+
+input {
+  background: rgba(15, 23, 42, 0.8);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.8rem 1rem;
+  font-size: 1rem;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: 999px;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+}
+
+.primary-btn {
+  background: linear-gradient(120deg, #38bdf8, #6366f1);
+  color: #0f172a;
+  font-weight: 600;
+  transition: transform 0.15s ease;
+}
+
+.primary-btn:active {
+  transform: scale(0.97);
+}
+
+.ghost-btn {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid transparent;
+  padding: 0.35rem 0.9rem;
+  font-size: 0.85rem;
+}
+
+.ghost-btn:hover {
+  color: var(--text);
+  border-color: rgba(148, 163, 184, 0.3);
+}
+
+.ghost-btn.danger {
+  color: var(--danger);
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.status-line {
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.status-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
+.status-dot.online {
+  background: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.3);
+}
+
+.status-dot.offline {
+  background: rgba(248, 113, 113, 0.15);
+  color: var(--danger);
+  border-color: rgba(248, 113, 113, 0.3);
+}
+
+.composer form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 1.5rem;
+}
+
+@media (max-width: 960px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.items-list,
+.users-list,
+.logs-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 0.5rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.item:last-child {
+  border-bottom: none;
+}
+
+.item-text {
+  margin: 0;
+}
+
+.item-meta {
+  font-size: 0.8rem;
+}
+
+.item-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.metrics {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.metrics li {
+  display: flex;
+  justify-content: space-between;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.users-list li,
+.logs-list li {
+  font-size: 0.85rem;
+  color: var(--muted);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  padding-bottom: 0.5rem;
+}
+
+.users-list li:last-child,
+.logs-list li:last-child {
+  border-bottom: none;
+}
