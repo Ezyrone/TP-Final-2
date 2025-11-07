@@ -4,53 +4,53 @@
 **a)** Firebase Realtime Database et Ably Realtime.
 
 **b)**  
-- *Modèle de données* : Firebase, c’est un gros arbre JSON où chaque branche peut être écoutée. Ably ne stocke rien pour toi, il te donne des canaux pub/sub et tu balances les messages que tu veux.  
-- *Persistance* : Firebase garde tout (c’est une vraie base). Ably joue plutôt le rôle de bus d’événements, avec un historique limité si on veut, mais pas une base longue durée.  
-- *Mode d’écoute* : Firebase expose des listeners (`onValue`, `onChildAdded`…) qui renvoient l’état ou les deltas. Ably pousse juste les messages sur ton canal, à toi de reconstruire l’état.  
-- *Scalabilité* : Firebase a des quotas par base, donc il faut parfois découper ses chemins. Ably répartit les canaux sur ses clusters, ça encaisse bien les pics événementiels.
+- *Modèle de données* : Firebase expose un arbre JSON hiérarchique où chaque nœud peut être écouté. Ably fournit des canaux pub/sub qui transportent des messages arbitraires sans schéma imposé.  
+- *Persistance* : Firebase persiste l’intégralité de l’état (lecture différée possible). Ably joue surtout le rôle de bus d’événements ; l’historique optionnel reste limité et n’a pas vocation à servir de base durable.  
+- *Mode d’écoute* : Firebase propose des listeners (`onValue`, `onChildAdded`…) qui renvoient l’état et les deltas. Ably pousse simplement les messages aux abonnés ; la reconstruction d’état est laissée au client.  
+- *Scalabilité* : Firebase impose des quotas par base (écritures/s, connexions), ce qui oblige à répartir l’arbre. Ably répartit automatiquement les canaux sur ses clusters mondiaux, ce qui absorbe mieux les pics événementiels.
 
-**c)** Pour un petit Trello collaboratif/presence, je prends Firebase (structure + persistance). Pour un flux de signaux type trading ou IoT, Ably est plus adapté : faible latence, messages éphémères, clients qui gèrent l’état.
+**c)** Firebase convient à une application collaborative type tableau de tâches où l’état doit rester stocké et structuré. Ably correspond davantage à une diffusion de signaux temps réel (trading, IoT) où les clients gèrent l’état.
 
 ## Question 2 – Sécurité temps réel
 **a)**  
-1. DDoS via plein de sockets : limite par IP, proxy devant (Nginx/Cloudflare) et fermeture des sessions fantômes.  
-2. Vol de token : tout en HTTPS, tokens signés de courte durée, régénération fréquente.  
-3. Injections/payload chelou : validation/sanitisation systématique et règles d’autorisation par message.
+1. DDoS via connexions persistantes : limiter le nombre de sockets par IP, placer un proxy (Nginx/Cloudflare) et fermer les sessions inactives.  
+2. Vol de token : HTTPS obligatoire, tokens signés à durée courte, régénérations fréquentes.  
+3. Injections/payload malveillant : validation et assainissement systématiques, règles d’autorisation par message.
 
-**b)** Si on ne sait pas qui parle sur la socket, impossible d’appliquer des droits ou de tracer une action. L’auth + l’autorisation temps réel isolent les flux et permettent de couper un utilisateur s’il dérape.
+**b)** Sans gestion d’identité fiable, impossible d’isoler les flux ou d’appliquer des droits. Authentification + autorisation temps réel garantissent que seuls les utilisateurs légitimes publient ou écoutent et qu’une session peut être révoquée à tout moment.
 
 ## Question 3 – WebSockets vs Webhooks
-**a)** WebSocket = connexion TCP full-duplex qui reste ouverte. Webhook = un POST envoyé par un service quand un événement se produit.
+**a)** WebSocket : connexion TCP full-duplex maintenue ouverte. Webhook : requête HTTP sortante envoyée lorsqu’un événement se produit.
 
 **b)**  
-- WebSocket : ultra réactif, bi-directionnel. Mais il faut maintenir des connexions vivantes (ça coûte) et certains firewalls n’aiment pas.  
-- Webhook : hyper simple (un endpoint et c’est bon) et pas de connexion ouverte. Mais c’est à sens unique et il faut un endpoint accessible publiquement.
+- WebSocket : latence très faible, échange bidirectionnel. Limites : maintien de connexions coûteux, proxy/firewall parfois réticents.  
+- Webhook : intégration simple (un endpoint), aucun socket ouvert. Limites : unidirectionnel et nécessite un endpoint exposé publiquement.
 
-**c)** Je privilégie le Webhook quand les événements sont occasionnels (paiement, ticket créé) et que le récepteur peut exposer une URL. Inutile de garder une connexion WebSocket pour si peu.
+**c)** Le Webhook est préférable lorsque les événements sont ponctuels (confirmation de paiement, création de ticket) et que le destinataire peut exposer un endpoint accessible. Maintenir un WebSocket pour quelques notifications serait inutilement coûteux.
 
 ## Question 4 – CRDT & Collaboration
-**a)** Un CRDT (Conflict-free Replicated Data Type) est une structure pensée pour que chaque copie converge vers le même état, même si les messages arrivent dans le désordre.
+**a)** Un CRDT (Conflict-free Replicated Data Type) est une structure conçue pour que toutes les répliques convergent, même lorsque les mises à jour arrivent dans un ordre différent.
 
-**b)** Exemple : application de notes collaboratives qui fonctionne hors ligne. Chaque client applique ses modifications localement, puis synchronise. Grâce au CRDT (type RGA/LSEQ), tout le monde se retrouve avec le même texte sans merge manuel.
+**b)** Exemple : application de prise de notes collaborative hors ligne. Chaque client applique ses modifications localement puis synchronise ; grâce au CRDT (RGA, LSEQ…), l’état converge sans fusion manuelle.
 
-**c)** Les opérations d’un CRDT sont commutatives/idempotentes et s’appuient sur des horodatages logiques. L’ordre n’a donc pas d’importance : la règle de fusion donne toujours le même résultat, pas besoin de verrou global.
+**c)** Les opérations d’un CRDT sont commutatives et idempotentes, souvent basées sur des horodatages logiques. L’ordre n’impacte pas le résultat final : aucune coordination forte n’est nécessaire.
 
 ## Question 5 – Monitoring temps réel
-**a)** Les KPI que je regarde d’abord : latence end-to-end, nombre de connexions actives et débit de messages.
+**a)** Latence end-to-end, nombre de connexions actives, débit de messages (messages/s ou octets/s).
 
-**b)** Prometheus scrape les métriques exposées par l’app et les garde sous forme de séries temporelles. Grafana vient se brancher dessus pour afficher des dashboards et déclencher des alertes si quelque chose déraille.
+**b)** Prometheus collecte les métriques exposées par l’application et les stocke sous forme de séries temporelles. Grafana exploite ces séries pour construire des tableaux de bord et déclencher des alertes lorsqu’une métrique dépasse un seuil.
 
-**c)** Logs = événements textuels, pratiques pour remettre l’histoire dans l’ordre. Traces = suivi d’un parcours complet (span) dans un système distribué. Métriques = valeurs numériques agrégées dans le temps, parfaites pour repérer les tendances et alerter.
+**c)** Les logs décrivent des événements discrets (texte). Les traces suivent un parcours complet (span) dans un système distribué. Les métriques sont des valeurs numériques agrégées dans le temps, adaptées à l’observation continue et aux alertes.
 
 ## Question 6 – Déploiement & connexions persistantes
-**a)** Une connexion WebSocket reste sur l’instance qui l’a acceptée. Donc soit on a du sticky session au niveau du load balancer, soit on partage l’état via un bus (Redis, DB). Et ça consomme des ressources (FD, mémoire), donc il faut scaler en conséquence.
+**a)** Une connexion WebSocket reste attachée à l’instance qui l’a acceptée. Le load balancer doit donc maintenir l’affinité (sticky sessions) ou l’application doit partager l’état via un bus (Redis, DB). Le nombre élevé de sockets consomme des descripteurs et de la mémoire, ce qui impose de scaler horizontalement.
 
-**b)** Kubernetes aide car il gère l’auto-scaling, les probes de santé, les ConfigMaps/Secrets et les Services/Ingress. Quand un pod tombe, un autre prend le relais et les sockets peuvent se reconnecter automatiquement.
+**b)** Kubernetes facilite ce contexte grâce à l’auto-scaling, aux probes de santé, à la gestion des ConfigMaps/Secrets et aux objets Service/Ingress. Lorsqu’un pod tombe, les connexions se reconnectent sur un autre pod sans intervention manuelle.
 
 ## Question 7 – Stratégies de résilience client
 **a)**  
-1. Reconnexion auto avec backoff pour ne pas spammer le serveur.  
-2. Stockage temporaire des actions pour les rejouer quand la connexion revient.  
-3. Heartbeat/ping pour détecter la déconnexion et prévenir l’utilisateur (mode dégradé).
+1. Reconnexion automatique avec backoff pour éviter les rafales.  
+2. File d’actions locale afin de rejouer les opérations lorsque la connexion revient.  
+3. Heartbeat/ping régulier pour détecter la perte de lien et basculer en mode dégradé (lecture seule, bannière d’alerte).
 
-**b)** L’exponential backoff augmente le délai (1 s, 2 s, 4 s…) entre les tentatives. Ça laisse le temps au serveur de revenir et évite que tout le monde reconnecte simultanément.
+**b)** L’exponential backoff augmente progressivement l’intervalle entre les tentatives (1 s, 2 s, 4 s…). Cela laisse le temps au serveur de revenir et évite que tous les clients se reconnectent simultanément.

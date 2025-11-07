@@ -24,11 +24,11 @@ L’interface est accessible sur `http://localhost:3000`. Le service Go expose s
 
 ## Choix techniques
 
-- **Express + ws** : pile maîtrisée, légère et adaptée à une exécution hors ligne sans dépendance cloud.
-- **better-sqlite3** : accès synchrone à SQLite, idéal pour stocker un volume modeste sans surcouche ORM.
-- **PBKDF2 (module `crypto`)** : hashing des secrets sans dépendance externe, conforme aux exigences de sécurité.
-- **Vanilla JS** : permet de manipuler directement l’API WebSocket et de garder un front léger.
-- **Go** : séparation claire de l’observabilité via un service dédié, plus simple à instrumenter ou remplacer.
+- **Express + ws** : pile maîtrisée, légère et adaptée à une exécution hors ligne 
+- **better-sqlite3** : accès synchrone à SQLite
+- **PBKDF2 (module `crypto`)** : hashing 
+- **Vanilla JS** : permet de manipuler directement l’API WebSocket et de garder un front léger
+- **Go** : monitoring
 
 ## Fonctionnalités livrées
 
@@ -45,7 +45,7 @@ L’interface est accessible sur `http://localhost:3000`. Le service Go expose s
 
 1. **Authentification** : pseudos uniques (collation NOCASE), secrets hashés (PBKDF2 + salt) et tokens protégés (SHA‑256). Toute connexion WebSocket sans token valide est rejetée.
 2. **Validation/Sanitisation** : `sanitizeContent` impose une longueur comprise entre 1 et 280 caractères et filtre les caractères sensibles avant stockage.
-3. **Autorisations** : seul le propriétaire d’un item peut le modifier ou le supprimer. Un limiteur simple (15 actions / 10 s) empêche les abus.
+3. **Autorisations** : seul le propriétaire d’un item peut le modifier ou le supprimer
 
 ## Gestion des erreurs
 
@@ -56,7 +56,7 @@ L’interface est accessible sur `http://localhost:3000`. Le service Go expose s
 ## Limites et pistes d’évolution
 
 1. Les sessions expirent via une purge périodique (~48 h). Un mécanisme de refresh token améliorerait la rotation.
-2. L’édition reste mono-auteur. Implémenter un CRDT permettrait de gérer la co-édition (bonus du sujet).
+2. L’édition reste mono-auteur. Implémenter un CRDT permettrait de gérer la co-édition 
 3. Le monitoring est local. Un export Prometheus/Grafana apporterait des alertes et une observation plus poussée.
 4. L’UI en vanilla répond au besoin, mais une base Vite + librairie de composants faciliterait les évolutions et les tests.
 
