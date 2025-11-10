@@ -54,3 +54,6 @@
 3. Heartbeat/ping régulier pour détecter la perte de lien et basculer en mode dégradé (lecture seule, bannière d’alerte).
 
 **b)** L’exponential backoff augmente progressivement l’intervalle entre les tentatives (1 s, 2 s, 4 s…). Cela laisse le temps au serveur de revenir et évite que tous les clients se reconnectent simultanément.
+
+
+
